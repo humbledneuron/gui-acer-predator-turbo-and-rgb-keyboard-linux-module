@@ -405,6 +405,17 @@ class RGBWebHandler(SimpleHTTPRequestHandler):
             background: #505050;
         }
         
+        .direction-btn.active, .zone-btn.active {
+            background: #83B81A !important;
+            color: white;
+        }
+        
+        .zone-btn {
+            font-size: 12px;
+            padding: 8px;
+            min-height: 35px;
+        }
+        
         @media (max-width: 768px) {
             .main-content {
                 grid-template-columns: 1fr;
@@ -440,6 +451,25 @@ class RGBWebHandler(SimpleHTTPRequestHandler):
                     <input type="range" class="slider" id="speedSlider" min="1" max="9" value="5">
                 </div>
                 
+                <div class="slider-group" id="directionGroup" style="display: none;">
+                    <label>↔️ Direction</label>
+                    <div style="display: flex; gap: 10px; margin-top: 5px;">
+                        <button class="btn btn-secondary direction-btn" data-direction="1" style="flex: 1;">→ Right to Left</button>
+                        <button class="btn btn-secondary direction-btn" data-direction="2" style="flex: 1;">← Left to Right</button>
+                    </div>
+                </div>
+                
+                <div class="slider-group" id="zoneGroup" style="display: none;">
+                    <label>🎯 Zone Selection</label>
+                    <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; margin-top: 5px;">
+                        <button class="btn btn-secondary zone-btn" data-zone="1">Zone 1</button>
+                        <button class="btn btn-secondary zone-btn" data-zone="2">Zone 2</button>
+                        <button class="btn btn-secondary zone-btn" data-zone="3">Zone 3</button>
+                        <button class="btn btn-secondary zone-btn" data-zone="4">Zone 4</button>
+                    </div>
+                    <button class="btn" onclick="applyToAllZones()" style="width: 100%; margin-top: 8px;">🌈 Apply to All Zones</button>
+                </div>
+
                 <div class="slider-group" id="colorGroup">
                     <label>🎨 Color</label>
                     <input type="color" class="color-picker" id="colorPicker" value="#32ff32">
@@ -453,6 +483,18 @@ class RGBWebHandler(SimpleHTTPRequestHandler):
                         <div class="preset-color" style="background: #ff00ff" data-color="#ff00ff" title="Magenta"></div>
                         <div class="preset-color" style="background: #00ffff" data-color="#00ffff" title="Cyan"></div>
                         <div class="preset-color" style="background: #ffffff" data-color="#ffffff" title="White"></div>
+                    </div>
+                </div>
+                
+                <div class="slider-group">
+                    <label>⚡ Quick Presets</label>
+                    <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; margin-top: 5px;">
+                        <button class="btn" onclick="applyPreset('acer_green')">🟢 Acer Green</button>
+                        <button class="btn" onclick="applyPreset('gaming_red')">🔴 Gaming Red</button>
+                        <button class="btn" onclick="applyPreset('cool_blue')">🔵 Cool Blue</button>
+                        <button class="btn" onclick="applyPreset('rainbow')">🌈 Rainbow</button>
+                        <button class="btn" onclick="applyPreset('purple_zoom')">🟣 Purple Zoom</button>
+                        <button class="btn btn-secondary" onclick="applyPreset('turn_off')">⚫ Turn Off</button>
                     </div>
                 </div>
             </div>
@@ -495,6 +537,8 @@ class RGBWebHandler(SimpleHTTPRequestHandler):
     <script>
         let currentMode = 3;
         let rgbModes = [];
+        let currentDirection = 1;
+        let currentZone = 1;
         
         // Initialize the web interface
         async function init() {
@@ -612,10 +656,24 @@ class RGBWebHandler(SimpleHTTPRequestHandler):
             
             const color = `rgb(${adjustedR}, ${adjustedG}, ${adjustedB})`;
             
-            // Update all zones (simplified - in reality would depend on mode)
-            for (let i = 1; i <= 4; i++) {
-                const zone = document.getElementById(`zone${i}`);
-                zone.style.background = color;
+            // Update zones based on mode
+            if (state.mode === 0) {
+                // Static mode - only update selected zone
+                for (let i = 1; i <= 4; i++) {
+                    const zone = document.getElementById(`zone${i}`);
+                    if (i === state.zone) {
+                        zone.style.background = color;
+                    } else {
+                        // Keep other zones dimmed or in previous color
+                        zone.style.background = '#404040';
+                    }
+                }
+            } else {
+                // Other modes - update all zones
+                for (let i = 1; i <= 4; i++) {
+                    const zone = document.getElementById(`zone${i}`);
+                    zone.style.background = color;
+                }
             }
         }
         
@@ -643,6 +701,30 @@ class RGBWebHandler(SimpleHTTPRequestHandler):
                     applySettings();
                 });
             });
+            
+            // Direction buttons
+            document.querySelectorAll('.direction-btn').forEach(btn => {
+                btn.addEventListener('click', (e) => {
+                    document.querySelectorAll('.direction-btn').forEach(b => b.classList.remove('active'));
+                    e.target.classList.add('active');
+                    currentDirection = parseInt(e.target.dataset.direction);
+                    applySettings();
+                });
+            });
+            
+            // Zone buttons
+            document.querySelectorAll('.zone-btn').forEach(btn => {
+                btn.addEventListener('click', (e) => {
+                    document.querySelectorAll('.zone-btn').forEach(b => b.classList.remove('active'));
+                    e.target.classList.add('active');
+                    currentZone = parseInt(e.target.dataset.zone);
+                    applySettings();
+                });
+            });
+            
+            // Set default active states
+            document.querySelector('.direction-btn[data-direction="1"]').classList.add('active');
+            document.querySelector('.zone-btn[data-zone="1"]').classList.add('active');
         }
         
         function selectMode(modeId) {
@@ -654,8 +736,18 @@ class RGBWebHandler(SimpleHTTPRequestHandler):
             
             // Show/hide controls based on mode
             const mode = rgbModes.find(m => m.id === modeId);
+            
+            // Speed control (all animated modes)
             document.getElementById('speedGroup').style.display = mode.supports_speed ? 'block' : 'none';
+            
+            // Color control (modes that accept color)
             document.getElementById('colorGroup').style.display = mode.supports_color ? 'block' : 'none';
+            
+            // Direction control (Wave and Shifting modes)
+            document.getElementById('directionGroup').style.display = (modeId === 3 || modeId === 4) ? 'block' : 'none';
+            
+            // Zone control (Static mode only)
+            document.getElementById('zoneGroup').style.display = (modeId === 0) ? 'block' : 'none';
             
             applySettings();
         }
@@ -675,8 +767,8 @@ class RGBWebHandler(SimpleHTTPRequestHandler):
                 brightness: brightness,
                 speed: speed,
                 color: [r, g, b],
-                direction: 1,
-                zone: 1
+                direction: currentDirection,
+                zone: currentZone
             };
             
             try {
@@ -741,6 +833,127 @@ class RGBWebHandler(SimpleHTTPRequestHandler):
             } catch (error) {
                 console.error('Failed to load profile:', error);
             }
+        }
+        
+        async function applyPreset(presetName) {
+            const presets = {
+                'acer_green': { mode: 1, color: [131, 184, 26], speed: 5, brightness: 100 },
+                'gaming_red': { mode: 3, color: [255, 0, 0], speed: 7, brightness: 90 },
+                'cool_blue': { mode: 0, color: [0, 100, 255], zone: 1, brightness: 80 },
+                'rainbow': { mode: 2, speed: 6, brightness: 100 },
+                'purple_zoom': { mode: 5, color: [128, 0, 255], speed: 4, brightness: 85 },
+                'turn_off': { brightness: 0 }
+            };
+            
+            const preset = presets[presetName];
+            if (!preset) return;
+            
+            try {
+                // Apply the preset
+                if (presetName === 'turn_off') {
+                    // Just turn off brightness
+                    const response = await fetch('/api/set_mode', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ mode: currentMode, brightness: 0 })
+                    });
+                } else {
+                    // Apply full preset
+                    const data = {
+                        mode: preset.mode,
+                        brightness: preset.brightness,
+                        speed: preset.speed || 5,
+                        color: preset.color || [255, 255, 255],
+                        direction: currentDirection,
+                        zone: preset.zone || currentZone
+                    };
+                    
+                    const response = await fetch('/api/set_mode', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(data)
+                    });
+                    
+                    // Update UI to reflect preset
+                    if (preset.mode !== undefined) {
+                        currentMode = preset.mode;
+                        document.querySelectorAll('.mode-btn').forEach(btn => btn.classList.remove('active'));
+                        document.querySelector(`[onclick*="selectMode(${preset.mode})"]`).classList.add('active');
+                        
+                        // Update control visibility
+                        const mode = rgbModes.find(m => m.id === preset.mode);
+                        document.getElementById('speedGroup').style.display = mode?.supports_speed ? 'block' : 'none';
+                        document.getElementById('colorGroup').style.display = mode?.supports_color ? 'block' : 'none';
+                        document.getElementById('directionGroup').style.display = (preset.mode === 3 || preset.mode === 4) ? 'block' : 'none';
+                        document.getElementById('zoneGroup').style.display = (preset.mode === 0) ? 'block' : 'none';
+                    }
+                    
+                    if (preset.color) {
+                        const [r, g, b] = preset.color;
+                        const hexColor = `#${r.toString(16).padStart(2, '0')}${g.toString(16).padStart(2, '0')}${b.toString(16).padStart(2, '0')}`;
+                        document.getElementById('colorPicker').value = hexColor;
+                    }
+                    
+                    if (preset.brightness !== undefined) {
+                        document.getElementById('brightnessSlider').value = preset.brightness;
+                        document.getElementById('brightnessValue').textContent = preset.brightness;
+                    }
+                    
+                    if (preset.speed !== undefined) {
+                        document.getElementById('speedSlider').value = preset.speed;
+                        document.getElementById('speedValue').textContent = preset.speed;
+                    }
+                }
+                
+                // Show success message
+                const presetNames = {
+                    'acer_green': 'Acer Green Breathing',
+                    'gaming_red': 'Gaming Red Wave',
+                    'cool_blue': 'Cool Blue Static',
+                    'rainbow': 'Rainbow Neon',
+                    'purple_zoom': 'Purple Zoom',
+                    'turn_off': 'Turn Off'
+                };
+                
+                console.log(`Applied preset: ${presetNames[presetName]}`);
+                
+            } catch (error) {
+                console.error('Failed to apply preset:', error);
+            }
+        }
+        
+        async function applyToAllZones() {
+            if (currentMode !== 0) return; // Only works in static mode
+            
+            const brightness = parseInt(document.getElementById('brightnessSlider').value);
+            const colorHex = document.getElementById('colorPicker').value;
+            
+            // Convert hex to RGB
+            const r = parseInt(colorHex.substr(1, 2), 16);
+            const g = parseInt(colorHex.substr(3, 2), 16);
+            const b = parseInt(colorHex.substr(5, 2), 16);
+            
+            // Apply to all zones
+            for (let zone = 1; zone <= 4; zone++) {
+                const data = {
+                    mode: 0,
+                    brightness: brightness,
+                    color: [r, g, b],
+                    zone: zone
+                };
+                
+                try {
+                    await fetch('/api/set_mode', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(data)
+                    });
+                } catch (error) {
+                    console.error(`Failed to apply to zone ${zone}:`, error);
+                }
+            }
+            
+            console.log('Applied color to all zones');
         }
         
         // Initialize when page loads
